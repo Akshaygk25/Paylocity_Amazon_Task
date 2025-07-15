@@ -1,0 +1,5 @@
+[
+  { "brand": "Noise", "min_price": 1000, "max_price": 2000 },
+  { "brand": "boAt", "min_price": 1500, "max_price": 2500 },
+  { "brand": "Fire-Boltt", "min_price": 1200, "max_price": 2200 }
+]
