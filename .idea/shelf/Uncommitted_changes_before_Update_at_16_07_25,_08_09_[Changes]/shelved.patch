@@ -1,0 +1,129 @@
+Index: pages/results_page.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import re\nimport time\n\nfrom selenium.webdriver import ActionChains, Keys\nfrom selenium.webdriver.support.expected_conditions import presence_of_all_elements_located\nfrom selenium.webdriver.support.ui import WebDriverWait\nfrom selenium.webdriver.support import expected_conditions as EC\nfrom selenium.webdriver.common.by import By\n\nfrom pages.base_page import BasePage\n\n\nclass ResultsPage(BasePage):\n\n    def __init__(self, driver):\n        super().__init__(driver)\n        self.driver = driver\n        self.go = (By.XPATH, \"//div//input[@class='a-button-input']\")\n        self.go1 = (By.XPATH, \"//input[@class='a-button-input']\")\n        self.price_elements = (By.XPATH, \"//div[@class='puisg-row']//span[@class='a-price-whole']\")\n        self.SORT_BY = (By.XPATH,\"//span[@data-action='a-dropdown-button']\")\n        self.SORT_BY_HIGH_TO_LOW = (By.XPATH, \"//a[text()='Price: High to Low']\")\n        self.FIRST_PRODUCT = (By.XPATH, \"//div[@data-component-type='s-search-result']\")\n\n\n    def wait_for_results_title(self, keyword):\n        WebDriverWait(self.driver, 15).until(EC.title_contains(keyword))\n        return keyword.lower() in self.driver.title.lower()\n\n    def filter_by_brand(self,brand):\n        self.click((By.XPATH, f\"//li//span[text()='{brand}']\"))\n\n    def set_price_slider_range(self, min_price, max_price):\n        wait = WebDriverWait(self.driver, 10)\n\n        if min_price > max_price:\n            raise ValueError('Min price should be more than Max price')\n\n        min_slider = wait.until(EC.element_to_be_clickable(\n            (By.XPATH, \"//input[@type='range' and @aria-label='Minimum price']\")))\n        max_slider = wait.until(EC.element_to_be_clickable(\n            (By.XPATH, \"//input[@type='range' and @aria-label='Maximum price']\")))\n\n        def get_current_prices():\n            min_text = self.driver.find_element(By.XPATH, \"//label[contains(@class,'sf-lower-bound-label')]//span\").text\n            max_text = self.driver.find_element(By.XPATH, \"//label[contains(@class,'sf-upper-bound-label')]//span\").text\n            min_val = int(re.sub(r\"[^\\d]\", \"\", min_text))\n            max_val = int(re.sub(r\"[^\\d]\", \"\", max_text))\n            return min_val, max_val\n\n        # Adjust lower slider with arrow keys\n        for _ in range(100):\n            current_min, _ = get_current_prices()\n            if current_min >= min_price:\n                break\n            min_slider.send_keys(Keys.ARROW_RIGHT)\n            time.sleep(0.1)\n\n        # Adjust upper slider with arrow keys\n        for _ in range(100):\n            _, current_max = get_current_prices()\n            if current_max <= max_price:\n                break\n            max_slider.send_keys(Keys.ARROW_LEFT)\n            time.sleep(0.1)\n\n        final_min, final_max = get_current_prices()\n        print(f\"Final slider values: ₹{final_min} - ₹{final_max}\")\n\n        self.click(self.go1)\n\n        assert final_min >= min_price, f\"Lower price not set correctly: ₹{final_min} < ₹{min_price}\"\n        assert final_max <= max_price, f\"Upper price not set correctly: ₹{final_max} > ₹{max_price}\"\n\n    def get_prices(self):\n        # Find all product containers\n        product_cards = self.wait.until(presence_of_all_elements_located((By.XPATH, \"//div[@data-component-type='s-search-result']\")))\n\n        prices = []\n\n        for card in product_cards:\n            try:\n                whole = card.find_element(By.CLASS_NAME, \"a-price-whole\").text.strip()\n                fraction = card.find_element(By.CLASS_NAME, \"a-price-fraction\").text.strip()\n                if whole:\n                    price_str = whole.replace(\",\", \"\") + \".\" + fraction\n                    prices.append(float(price_str))\n            except Exception:\n                # Skip cards without proper price\n                continue\n\n        return prices\n\n\n    def sort_by(self):\n        self.click(self.SORT_BY)\n        self.click(self.SORT_BY_HIGH_TO_LOW)\n\n    def highest_prod(self):\n        current_handles = self.driver.window_handles\n        product_card = self.wait.until(EC.presence_of_element_located(self.FIRST_PRODUCT))\n\n        # Locate <a> inside the first product\n        link_element = product_card.find_element(By.TAG_NAME, \"a\")\n        href = link_element.get_attribute(\"href\")\n\n        if not href:\n            raise Exception(\"First product does not contain a clickable link\")\n\n        # Open the link in a new tab\n        self.driver.execute_script(f\"window.open('{href}', '_blank');\")\n\n        # Wait until new tab is opened\n        self.wait.until(\n            lambda d: len(d.window_handles) > len(current_handles),\n            message=\"New tab did not open in time\"\n        )\n\n        new_tab = [h for h in self.driver.window_handles if h not in current_handles][0]\n        self.driver.switch_to.window(new_tab)\n\n    def clear_brand(self):\n        locator = (By.XPATH, \"//div//span[text()='Clear']\")\n        try:\n            element = self.wait.until(EC.element_to_be_clickable(locator))\n            element.click()\n        except:\n            element = self.driver.find_element(*locator)\n            self.driver.execute_script(\"arguments[0].click();\", element)\n\n\n\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/pages/results_page.py b/pages/results_page.py
+--- a/pages/results_page.py	(revision d035ce844ec30a83d1239a404dc44e6787eeaf63)
++++ b/pages/results_page.py	(date 1752603190616)
+@@ -129,4 +129,3 @@
+             self.driver.execute_script("arguments[0].click();", element)
+ 
+ 
+-
+Index: tests/test_amazon.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import time\nimport pytest\nfrom pages.product_page import ProductPage\nfrom pages.results_page import ResultsPage\nfrom pages.home_page import HomePage\n\n# Parametrize the test\n@pytest.mark.parametrize(\"search_term,brands,min_price,max_price\", [\n    (\"smartwatches\", [\"Noise\", \"boAt\", \"Fire-Boltt\", \"Fastrack\"], 1000, 2000)\n])\ndef test_amazon_search(browser_instance, search_term, brands, min_price, max_price):\n    driver = browser_instance\n    home_page = HomePage(driver)\n    home_page.open_amazon()\n    home_page.search_amazon(search_term)\n\n    results = ResultsPage(driver)\n    assert results.wait_for_results_title(search_term)\n\n    for brand in brands:\n        results.filter_by_brand(brand)\n        results.set_price_slider_range(min_price, max_price)\n\n        prices = results.get_prices()\n        for price in prices:\n            assert min_price < price < max_price, f\"Price {price} is out of range\"\n\n        results.sort_by()\n        results.highest_prod()\n\n        product = ProductPage(driver)\n        cart = product.add_to_cart()\n        cart.verify_product_in_cart()\n\n        cart.close_current_window()\n        cart.switch_to_parent_window()\n        results.clear_brand()\n        time.sleep(3)\n        results.filter_by_brand(brand)\n\n        driver.back()\n        driver.refresh()\n        time.sleep(4)\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/tests/test_amazon.py b/tests/test_amazon.py
+--- a/tests/test_amazon.py	(revision d035ce844ec30a83d1239a404dc44e6787eeaf63)
++++ b/tests/test_amazon.py	(date 1752603279751)
+@@ -6,8 +6,8 @@
+ 
+ # Parametrize the test
+ @pytest.mark.parametrize("search_term,brands,min_price,max_price", [
+-    ("smartwatches", ["Noise", "boAt", "Fire-Boltt", "Fastrack"], 1000, 2000)
+-])
++    ("smartwatches", ["Noise", "boAt", "Fire-Boltt", "Fastrack"], 1000, 2000)])
++#Note - We'll be using price range of 1000 to 2000 only
+ def test_amazon_search(browser_instance, search_term, brands, min_price, max_price):
+     driver = browser_instance
+     home_page = HomePage(driver)
+@@ -35,9 +35,9 @@
+         cart.close_current_window()
+         cart.switch_to_parent_window()
+         results.clear_brand()
+-        time.sleep(3)
++        time.sleep(5)
+         results.filter_by_brand(brand)
+ 
+         driver.back()
+         driver.refresh()
+-        time.sleep(4)
++        time.sleep(8)
+Index: docs/test_use_cases.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/docs/test_use_cases.md b/docs/test_use_cases.md
+new file mode 100644
+--- /dev/null	(date 1752633361549)
++++ b/docs/test_use_cases.md	(date 1752633361549)
+@@ -0,0 +1,71 @@
++# Test Use Cases: Amazon.in Search, Filter, and Add-to-Cart Automation
++
++## Objective
++
++This document outlines the test scenarios automated to validate the core e-commerce functionalities on [Amazon.in](https://www.amazon.in), specifically focusing on:
++
++- Search functionality
++- Product filtering by brand and price
++- Sorting
++- Add-to-cart workflow
++
++---
++
++## 1. Search Functionality
++
++### Use Cases:
++- Verify that the search bar is present and functional.
++- Validate entering a product keyword (e.g., "smartwatches") displays relevant results.
++- Check if the page title contains the searched keyword.
++- Ensure the first set of results are loaded properly.
++
++---
++
++## 2. Filter Functionality
++
++### Use Cases:
++
++#### Brand Filter:
++- Validate that brand filters (e.g., Noise, boAt, Fire-Boltt) are available on the sidebar.
++- Test selecting a brand applies the correct filter and refreshes results.
++- Verify product titles or branding elements reflect the selected brand.
++
++#### Price Range Filter:
++- Check the presence and functionality of the price range slider.
++- Set a minimum and maximum price (e.g., ₹1000–₹2000).
++- Verify the product listings fall within the selected price range.
++- Ensure the "Go" button applies the price filter.
++
++#### Clearing Filters:
++- Validate that clearing filters resets the result set.
++- Ensure previously applied filters are removed from the UI.
++
++---
++
++## 3. Sorting Functionality
++
++### Use Cases:
++- Verify the presence of sorting dropdown.
++- Test the “Price: High to Low” sorting option.
++- Ensure results re-order accordingly and the most expensive item appears first.
++
++---
++
++## 4. Add to Cart
++
++### Use Cases:
++- Click on the highest-priced product and open it in a new tab.
++- Validate that product details load correctly (product title, price, etc.).
++- Click on the "Add to Cart" button.
++- Verify redirection or update of cart count after adding.
++- Navigate to cart and confirm that the correct product is listed.
++
++---
++
++## 5. Miscellaneous
++
++### Use Cases:
++- Ensure browser tab/window management is handled properly after switching.
++- Handle dynamic waits for elements such as filters, product results, and price sliders.
++- Validate that the test is data-driven using external test data (Eg - search terms, brands, price range)
++- Capture screenshots and logs for failures in test reports (Eg - Allure integration).
