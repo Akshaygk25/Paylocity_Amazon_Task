@@ -129,4 +129,3 @@ class ResultsPage(BasePage):
             self.driver.execute_script("arguments[0].click();", element)
 
 
-
